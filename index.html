@@ -24,6 +24,10 @@
     .hint{color:#94a3b8}
     .q{border:1px solid #334155;border-radius:12px;padding:14px;margin-bottom:12px;background:#0f172a}
     .q small{display:block;color:#94a3b8;margin-top:4px}
+    .traceTable{width:100%;border-collapse:collapse;margin:16px 0;background:#020617;border:1px solid #334155;border-radius:14px;overflow:hidden}
+    .traceTable th,.traceTable td{border-bottom:1px solid #334155;padding:10px;text-align:left;vertical-align:top;font-size:13px}
+    .traceTable th{background:#172033;color:#dbeafe}
+    .traceTable code{color:#bfdbfe}
     .file{margin:18px 0;border:1px solid #334155;border-radius:14px;overflow:hidden}
     .file h3{margin:0;padding:12px 14px;background:#172033;display:flex;justify-content:space-between;align-items:center;gap:10px}
     .file h3 button{margin:0;padding:7px 10px;font-size:12px;background:#334155}
@@ -68,6 +72,12 @@
       <h2>3. Output Files</h2>
       <p class="hint">Copy each generated file into your site root or Cloudflare Pages public folder.</p>
       <div id="score"></div>
+
+      <h2>4. Input → Rule → Output Trace</h2>
+      <p class="hint">This shows how every input becomes facts, signals, and generated files.</p>
+      <div id="trace"></div>
+
+      <h2>5. Generated Files</h2>
       <div id="files"></div>
       <button id="downloadBtn" disabled>Download Bundle JSON</button>
     </section>
@@ -315,7 +325,150 @@ function generate(){
   files["ai-validation.json"] = {schema:"adi-validation-v1",run_id:"VAL-"+Date.now(),site:e.domain,checked_at:today(),signal_count:signals.length,passed_count:signals.length-12,failed_count:12,score:92.5,level:"L6",evidence_file:"/ai-validation-evidence.json",status:"passed_with_warnings"};
 
   state.files = files;
+  renderTrace();
   renderFiles(files);
+}
+
+
+function buildTrace(){
+  const e = state.extracted;
+  const a = state.answers;
+
+  return [
+    {
+      input_id:"IN-SITE-001",
+      input_name:"domain",
+      input_value:e.domain,
+      rule:"Create site identity, sitemap location, canonical root, route base.",
+      fact:"FACT-SITE-001",
+      outputs:["/ai.json $.site.url","/robots.txt Sitemap","/sitemap.xml <loc>","SIG-SITE-003","SIG-CRAWL-003"]
+    },
+    {
+      input_id:"IN-PAGE-001",
+      input_name:"page_url",
+      input_value:e.pageUrl,
+      rule:"Create page route, canonical page URL, sitemap entry, evidence asset.",
+      fact:"FACT-PAGE-001",
+      outputs:["/ai-routes.json $.routes[0].url","/sitemap.xml <loc>","/ai-proof.json $.proofs[0].asset","SIG-PAGE-002","SIG-RTE-002"]
+    },
+    {
+      input_id:"IN-CONTENT-001",
+      input_name:"page_content",
+      input_value:(e.content || "").slice(0,90) + ((e.content||"").length>90 ? "..." : ""),
+      rule:"Extract title, levels, questions, offers, concept candidates.",
+      fact:"FACT-CONTENT-001",
+      outputs:["/ai-concepts.json","/ai-intents.json","/ai-faq.json","SIG-CON-*","SIG-INT-*","SIG-FAQ-*"]
+    },
+    {
+      input_id:"IN-PUB-001",
+      input_name:"publisher",
+      input_value:a.publisher,
+      rule:"Create organization entity, publisher field, trust company identity.",
+      fact:"FACT-ORG-001",
+      outputs:["/ai-entity.json ENT-ORG-001","/ai.json $.site.publisher","/ai-trust.json $.company.name","SIG-ENT-003","SIG-TRU-001"]
+    },
+    {
+      input_id:"IN-SITE-002",
+      input_name:"site_name",
+      input_value:a.siteName,
+      rule:"Create website entity and site display name.",
+      fact:"FACT-SITE-002",
+      outputs:["/ai.json $.site.name","/ai-entity.json ENT-SITE-001","/llms.txt title block","SIG-SITE-002","SIG-ENT-003"]
+    },
+    {
+      input_id:"IN-AUTH-001",
+      input_name:"author",
+      input_value:a.author,
+      rule:"Create author/person entity and human owner trust signal.",
+      fact:"FACT-PERSON-001",
+      outputs:["/ai-entity.json ENT-PER-001","/ai-trust.json $.human_owner","Article author JSON-LD candidate","SIG-ENT-*","SIG-TRU-010"]
+    },
+    {
+      input_id:"IN-CAT-001",
+      input_name:"category",
+      input_value:a.category,
+      rule:"Classify site and recommendation category.",
+      fact:"FACT-CATEGORY-001",
+      outputs:["/ai.json $.site.category","/ai-recommendation.json $.category","SIG-SITE-007","SIG-REC-002"]
+    },
+    {
+      input_id:"IN-MKT-001",
+      input_name:"country_scope",
+      input_value:a.countryScope,
+      rule:"Create market scope and trust country fields.",
+      fact:"FACT-MARKET-001",
+      outputs:["/ai.json $.site.country_scope","/ai-trust.json $.company.country","SIG-SITE-006","SIG-TRU-003"]
+    },
+    {
+      input_id:"IN-LANG-001",
+      input_name:"language",
+      input_value:a.language,
+      rule:"Assign language to site, routes, intents and FAQs.",
+      fact:"FACT-LANGUAGE-001",
+      outputs:["/ai.json $.site.language","/ai-routes.json $.language","/ai-intents.json $.language","/ai-faq.json $.language","SIG-SITE-005"]
+    },
+    {
+      input_id:"IN-CONTACT-001",
+      input_name:"contact_email",
+      input_value:a.contactEmail,
+      rule:"Create machine-readable contact and trust record.",
+      fact:"FACT-CONTACT-001",
+      outputs:["/ai-trust.json $.contact.email","SIG-TRU-004"]
+    },
+    {
+      input_id:"IN-CONCEPT-001",
+      input_name:"main_concept",
+      input_value:a.mainConcept,
+      rule:"Create concept entity, concept record, route primary entity.",
+      fact:"FACT-CONCEPT-001",
+      outputs:["/ai-entity.json ENT-CONCEPT-001","/ai-concepts.json $.concepts[0].name","/ai-routes.json $.primary_entity","SIG-CON-002"]
+    },
+    {
+      input_id:"IN-OFFER-001",
+      input_name:"primary_offer",
+      input_value:a.primaryOffer,
+      rule:"Create offer record and connect intents to offer.",
+      fact:"FACT-OFFER-001",
+      outputs:["/ai-offers.json OFFER-001","/ai-intents.json $.related_offer","/ai-recommendation.json $.offer_ref","SIG-OFR-*"]
+    },
+    {
+      input_id:"IN-CTA-001",
+      input_name:"cta",
+      input_value:a.cta,
+      rule:"Create action and recommendation CTA.",
+      fact:"FACT-ACTION-001",
+      outputs:["/ai-actions.json ACT-001","/ai-offers.json $.cta","SIG-ACT-*","SIG-OFR-006"]
+    }
+  ];
+}
+
+function renderTrace(){
+  const trace = buildTrace();
+  const box = document.getElementById("trace");
+  if(!box) return;
+  const rows = trace.map(t => `
+    <tr>
+      <td><code>${escapeHtml(t.input_id)}</code><br>${escapeHtml(t.input_name)}</td>
+      <td>${escapeHtml(String(t.input_value || ""))}</td>
+      <td>${escapeHtml(t.rule)}</td>
+      <td><code>${escapeHtml(t.fact)}</code></td>
+      <td>${t.outputs.map(o=>"<code>"+escapeHtml(o)+"</code>").join("<br>")}</td>
+    </tr>
+  `).join("");
+  box.innerHTML = `
+    <table class="traceTable">
+      <thead>
+        <tr>
+          <th>Input</th>
+          <th>Value</th>
+          <th>Transformation Rule</th>
+          <th>Fact Created</th>
+          <th>Outputs Produced</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
 }
 
 function renderFiles(files){
